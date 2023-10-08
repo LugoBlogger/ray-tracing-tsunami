@@ -32,38 +32,51 @@ stackDir = '';  % if we have more than one .tif images
 % use degrees2dms() if you are given the source in the decimal form
 refPos = [-6, 6, 7.2;      % This is the source of the Tsunami
           105, 25, 22.8];   % (lat; lon);
-N_init_points = 20;
+
         
 % cut area around the reference point
-% bboxAroundRefPos = [];
-% bboxAroundRefPos = [105.4229722, 105.4230278, ...
-%                     -6.1019722, -6.1020278];    % [xMin, xMax, yMin, yMax]  (in degrees)        
-bboxAroundRefPos = [10000, 10000, ...
-                    10000, 10000];    % [xShiftLeft, xShiftRight, yShiftDown, yShiftUp]  (in degrees)   
+bboxAroundRefPos = [];      
+% bboxAroundRefPos = [20000, 20000, ...
+%                     20000, 20000];    % [xShiftLeft, xShiftRight, yShiftDown, yShiftUp]  (in degrees)   
 rot_angle = 0;
 % define border of ray tracing (after the border, the tracing will stop)
-X_border = [-8000, 8000];
-Y_border = [-8000, 8000];
+X_border = [-40000, 60000];   % <--- set this
+Y_border = [-80000, 60000];
 
 selectedTp = 600;
 smoothingFac = 2;   % bathymetry smoothing factor (-1 is no smoothing)
 
-levelLineBathyPlot = -2200:100:0;
+levelLineBathyPlot = -2200:100:0;   
 
 showBathyPlot = 'off';
-showVgPlot = 'off';
+showVgPlot = 'on';
 
+
+% -- ray tracing params
+% radius before hit the inland
+radius_next = 500;  % <--- set this 
+% radius to leave the inland
+init_radius = 5000;   % <--- set this (initial radius)
+ 
+numOfLevel = 100;     % define the group velocity interval here % 
+                      % <--- set this to increase the resolution of turning point for the ray tracing
+                      % = 20 for testing
+
+N_init_points = 60;   % number of rays emanate from the source point.
 
 %% -- read coordinate x, y (lon, lat)
-fprintf("   %s\n", 'Read coordinate from netCDF file');
+fprintf("   %s: ", 'Read coordinate from netCDF file');
+tic;
 [IM_combine, XX, YY, refPos_coord] = getBathyData(filenames, refPos, ...
   stackDir, smoothingFac);
 x = XX(:,1);
 y = YY(1,:);
+fprintf('%.2f [s]\n', toc);
 
 
 %% -- convert coordinate to UTM
-fprintf("   %s\n", 'Convert (lon, lat) to (UTMx, UTMy)');
+fprintf("   %s: ", 'Convert (lon, lat) to (UTMx, UTMy)');
+tic;
 [Nx ,Ny] = size(IM_combine);
 
 [Refx, Refy, ~] = deg2utm(refPos_coord(2), refPos_coord(1));
@@ -93,10 +106,11 @@ end
 
 Xsave = UTx(:);
 Ysave = UTy(:);
-
+fprintf('%.2f [s]\n', toc);
 
 %% -- plot bathy
-fprintf("   %s [%s]\n", 'Plot Bathy', showBathyPlot);
+fprintf("   %s [%s]: ", 'Plot Bathy', showBathyPlot);
+tic;
 fig = figure('Color', 'w', 'Visible', showBathyPlot);
   ax = axes('Parent', fig);
   
@@ -111,10 +125,12 @@ fig = figure('Color', 'w', 'Visible', showBathyPlot);
 % IM_save = IM_combine(:);
 % IM_save(IM_save<-50) = -50;
 % dlmwrite('bathy2D_BATNAS_cropped.txt',[Xsave,Ysave,IM_save])
+fprintf('%.2f [s]\n', toc);
 
 
 %% -- compute input data for ray tracing (wavenumber, Vg_bat, X_process, Y_process)
-fprintf("   %s\n", 'Calcuate ray tracing params');
+fprintf("   %s: ", 'Calcuate ray tracing params');
+tic;
 % calculating Vg in the domain
 g = 9.81;      % acceleration of gravity
 freq = 2*pi/selectedTp;   
@@ -130,8 +146,7 @@ positiveDepth(positiveDepth <= 0) = 0;
 Vp_bat = sqrt(g * tanh(wavenumber .* positiveDepth) ./ wavenumber);
 Vg_bat = 0.5 * Vp_bat .* (1 + 2*wavenumber .* positiveDepth ./ sinh(2*wavenumber .* positiveDepth));
 
-% numOfLevel = 100;     % define the group velocity interval here
-numOfLevel = 20;     % define the group velocity interval here
+
 levelLineVg_bat = linspace(0, max(Vg_bat(:)), numOfLevel); 
 % levelLineVg_bat = linspace(5, 50, 50); 
 
@@ -146,10 +161,12 @@ Yprocess = reshape(XY_Rot(2,:), Nx, Ny);
 % contour(Xprocess,Yprocess,reshape(IM_save,Nx,Ny),'ShowText','on','LevelList',[-100:10:-10,-5,-2.5])
 
 dVLevel = levelLineVg_bat(2) - levelLineVg_bat(1);
+fprintf('%.2f [s]\n', toc);
 
 
 %% -- plot group speed
-fprintf("   %s [%s]\n", 'Plot Group Speed', showVgPlot);
+fprintf("   %s [%s]: ", 'Plot Group Speed', showVgPlot);
+tic;
 fig = figure('Color', 'w', 'Visible', showVgPlot);
   ax = axes('Parent', fig);
   cmatrixVg_bat = contour(ax, Xprocess, Yprocess, Vg_bat, 'LevelList', levelLineVg_bat);
@@ -175,6 +192,7 @@ clineVg_bat = getContourLine(cmatrixVg_bat);
 %     yData = clineVg_bat(i).xy(2,:);
 %     plot(ax, xData, yData);
 %   end
+fprintf('%.2f [s]\n', toc);
 
 
 %% -- Start the animation of ray tracing
@@ -216,13 +234,13 @@ Realized_lvl = unique(Realized_lvl);
 F_interpolant = scatteredInterpolant(Xprocess(:), Yprocess(:), double(Vg_bat(:)));
 
 for idx_XY = 1:size(XY0, 2)   % iterate over number of starting points
-    
+  
+  
   % define direction of the vector at starting point
   % [Xstart, Xend, Ystart, Yend]
   dtheta = -2.0*pi/(N_init_points);
-  radius = 5000;   % <--- set this
-  xy_line = [XY0(1, idx_XY), radius*cos((idx_XY-1)*dtheta);
-             XY0(2, idx_XY), radius*sin((idx_XY-1)*dtheta)];     
+  xy_line = [XY0(1, idx_XY), init_radius*cos((idx_XY-1)*dtheta);
+             XY0(2, idx_XY), init_radius*sin((idx_XY-1)*dtheta)];     
 
   Txy = 0;                            % Rotation Degree minus means clockwise
   Rxy = [cosd(Txy), -sind(Txy);
@@ -408,14 +426,13 @@ for idx_XY = 1:size(XY0, 2)   % iterate over number of starting points
       end
       
       % hit the new inland (stop the ray tracing)
-      radius_next = 100;  % <-- set this
       test_next_nearest = xy_line(:,jj+1) + radius_next*pp_vector;
       if isnan(F_interpolant(test_next_nearest(1), test_next_nearest(2)))
         fprintf('   X0,Y0 = %.2f, %.2f tracing is done\n',XY0(:,idx_XY));
         break
       end
       
-      pause(0.001)
+      pause(0.0001)
 
       jj = jj + 1;
       
