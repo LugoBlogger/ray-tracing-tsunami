@@ -375,7 +375,7 @@ function minTimePath = computeMinPath(X_selected, Y_selected, ...
                  1, 0];
 
   for i = 1:N_init_points
-    message = sprintf(' (procees %d/%d init points)\n', i, N_init_points);
+    message = sprintf(' (process %d/%d init points)\n', i, N_init_points);
     fprintf('%s', message);
     
     path_j = ones(maxPathStep, 2) * NaN;

@@ -62,7 +62,7 @@ numOfLevel = 100;     % define the group velocity interval here %
                       % <--- set this to increase the resolution of turning point for the ray tracing
                       % = 20 for testing
 
-N_init_points = 60;   % number of rays emanate from the source point.
+N_init_points = 360;   % number of rays emanate from the source point.
 
 %% -- read coordinate x, y (lon, lat)
 fprintf("   %s: ", 'Read coordinate from netCDF file');
